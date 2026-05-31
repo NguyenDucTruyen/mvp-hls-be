@@ -17,22 +17,28 @@ MVP video upload & HLS streaming platform. Users upload raw video files; the sys
 | Runtime     | Node.js                                |
 | Package Mgr | pnpm                                   |
 
-## Current State (as of project start)
+## Current State (MVP Complete — Phase 9)
 
-- NestJS app bootstrapped
-- `UserModule` exists as a reference pattern (feature-based structure)
-- No database connection yet
-- No Cloudinary, BullMQ, or FFmpeg integration yet
+- ✅ Phase 0: Database foundation (PostgreSQL, TypeORM, migration — all tables + enums created)
+- ✅ Phase 1: Storage adapter (IStorageAdapter, CloudinaryStorageAdapter, StorageModule)
+- ✅ Phase 2: Queue / BullMQ producer (constants, module, QueueService with retry options)
+- ✅ Phase 3: Video entities & repository (Video, VideoVariant, IVideoRepository, VideoRepository)
+- ✅ Phase 4: DTOs (UploadVideoDto, ListVideosDto, VideoResponseDto)
+- ✅ Phase 5: VideoService & VideoController (5 endpoints: upload, list, detail, delete, retry)
+- ✅ Phase 6: FfmpegService (transcode HLS 360p/720p/1080p + thumbnail, local test passed)
+- ✅ Phase 7: VideoWorker (transcode → thumbnail → cleanup chain, error handling + BullMQ retry)
+- ✅ Phase 8: JobLog tracking (JobLog entity, IJobLogRepository, worker writes start/end/fail rows)
+- ✅ Phase 9: Unit tests (VideoService — 10 tests; VideoWorker — 9 tests), 0 TypeScript errors, build passes
 
 ## MVP Goals
 
-1. Upload raw video → store on Cloudinary
-2. Queue transcode job → process via BullMQ worker
-3. FFmpeg transcodes to HLS (360p / 720p / 1080p)
-4. Upload HLS files back to Cloudinary
-5. Generate thumbnail
-6. Expose REST API: upload, list, detail, delete, retry
-7. Track status per video: `uploaded → queued → processing → ready / failed`
+1. ✅ Upload raw video → store on Cloudinary
+2. ✅ Queue transcode job → process via BullMQ worker
+3. ✅ FFmpeg transcodes to HLS (360p / 720p / 1080p)
+4. ✅ Upload HLS files back to Cloudinary
+5. ✅ Generate thumbnail
+6. ✅ Expose REST API: upload, list, detail, delete, retry
+7. ✅ Track status per video: `uploaded → queued → processing → ready / failed`
 
 ## Out of Scope (for MVP)
 
@@ -44,14 +50,14 @@ MVP video upload & HLS streaming platform. Users upload raw video files; the sys
 
 ## Modules to Build
 
-| Module   | Responsibility                                    |
-|----------|---------------------------------------------------|
-| `videos` | CRUD, upload trigger, status tracking             |
-| `queue`  | BullMQ producer — enqueue transcode jobs          |
-| `worker` | BullMQ worker — consume jobs, call FFmpeg         |
-| `storage`| Cloudinary adapter (behind `IStorageAdapter`)     |
-| `ffmpeg` | FFmpeg wrapper (transcode + thumbnail)            |
-| `db`     | TypeORM config, entities, migrations              |
+| Module    | Responsibility                                    | Status      |
+|-----------|---------------------------------------------------|-------------|
+| `videos`  | CRUD, upload trigger, status tracking             | ✅ Complete  |
+| `queue`   | BullMQ producer — enqueue transcode jobs          | ✅ Complete  |
+| `worker`  | BullMQ worker — consume jobs, call FFmpeg         | ✅ Complete  |
+| `storage` | Cloudinary adapter (behind `IStorageAdapter`)     | ✅ Complete  |
+| `ffmpeg`  | FFmpeg wrapper (transcode + thumbnail)            | ✅ Complete  |
+| `db`      | TypeORM config, entities, migrations, job-log     | ✅ Complete  |
 
 ## Environment Variables Required
 
