@@ -3,9 +3,10 @@ import { UserModule } from './modules/users/modules/user.module';
 import { SystemModule } from './modules/system/modules/system.module';
 import { StorageModule } from './infra/storage/storage.module';
 import { QueueModule } from './infra/queue/queue.module';
+import { VideoModule } from './modules/videos/modules/video.module';
 
 @Module({
-  imports: [SystemModule, StorageModule, QueueModule, UserModule],
+  imports: [SystemModule, StorageModule, QueueModule, VideoModule, UserModule],
   controllers: [],
 })
 export class AppModule {}
