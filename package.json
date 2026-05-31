@@ -22,7 +22,8 @@
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/infra/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/infra/database/data-source.ts",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/infra/database/data-source.ts",
-    "migration:create": "typeorm-ts-node-commonjs migration:create src/infra/database/migrations/Migration"
+    "migration:create": "typeorm-ts-node-commonjs migration:create src/infra/database/migrations/Migration",
+    "generate:openapi": "ts-node --project tsconfig.json -r tsconfig-paths/register scripts/generate-openapi.ts"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
@@ -42,6 +43,8 @@
     "multer": "^2.1.1",
     "pg": "^8.21.0",
     "reflect-metadata": "^0.2.2",
+    "@nestjs/swagger": "^11.4.4",
+    "js-yaml": "^4.1.1",
     "rxjs": "^7.8.1",
     "typeorm": "^1.0.0"
   },
@@ -54,6 +57,7 @@
     "@types/express": "^5.0.0",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/jest": "^30.0.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.0.0",
     "@types/supertest": "^7.0.0",
     "eslint": "^9.18.0",
