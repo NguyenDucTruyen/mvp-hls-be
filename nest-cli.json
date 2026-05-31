@@ -1,0 +1,24 @@
+{
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "schematics": {
+    "@nestjs/schematics:service": {
+      "spec": false
+    },
+    "@nestjs/schematics:controller": {
+      "spec": false
+    },
+    "@nestjs/schematics:module": {
+      "spec": false
+    },
+    "@nestjs/schematics:guard": {
+      "spec": false
+    },
+    "@nestjs/schematics:pipe": {
+      "spec": false
+    },
+    "@nestjs/schematics:interceptor": {
+      "spec": false
+    }
+  }
+}
