@@ -12,6 +12,9 @@ import { QueueService } from '../infra/queue/queue.service';
 import type { IVideoRepository } from '../modules/videos/repositories/video.repository.interface';
 import { VIDEO_REPOSITORY } from '../modules/videos/repositories/video.repository.interface';
 import { VideoStatus } from '../modules/videos/entities/video.entity';
+import type { IJobLogRepository } from '../infra/database/repositories/job-log.repository.interface';
+import { JOB_LOG_REPOSITORY } from '../infra/database/repositories/job-log.repository.interface';
+import type { JobLog } from '../infra/database/entities/job-log.entity';
 
 interface JobPayload {
   videoId: string;
@@ -26,6 +29,8 @@ export class VideoWorker extends WorkerHost {
     private readonly videoRepo: IVideoRepository,
     @Inject(STORAGE_ADAPTER)
     private readonly storage: IStorageAdapter,
+    @Inject(JOB_LOG_REPOSITORY)
+    private readonly jobLogRepo: IJobLogRepository,
     private readonly ffmpegService: FfmpegService,
     private readonly queueService: QueueService,
   ) {
@@ -53,7 +58,18 @@ export class VideoWorker extends WorkerHost {
       `[transcode] start video=${videoId} attempt=${job.attemptsMade + 1}`,
     );
 
+    let logEntry: JobLog | null = null;
     try {
+      logEntry = await this.jobLogRepo
+        .create({
+          videoId,
+          queueJobId: job.id ?? null,
+          type: JobType.TRANSCODE_HLS,
+          attempt: job.attemptsMade + 1,
+          startedAt: new Date(),
+        })
+        .catch(() => null);
+
       const video = await this.videoRepo.findById(videoId);
       if (!video) throw new Error(`Video ${videoId} not found`);
       if (!video.rawUrl) throw new Error(`Video ${videoId} has no rawUrl`);
@@ -125,14 +141,25 @@ export class VideoWorker extends WorkerHost {
         processedAt: new Date(),
       });
 
+      if (logEntry) {
+        await this.jobLogRepo
+          .markCompleted(logEntry.id, new Date())
+          .catch(() => {});
+      }
       this.logger.log(`[transcode] complete video=${videoId}`);
 
       // 6. Chain thumbnail job
       await this.queueService.enqueueThumbnail(videoId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? (err.stack ?? null) : null;
       this.logger.error(`[transcode] failed video=${videoId}: ${message}`);
       await this.videoRepo.setFailed(videoId, message).catch(() => {});
+      if (logEntry) {
+        await this.jobLogRepo
+          .markFailed(logEntry.id, message, stack, new Date())
+          .catch(() => {});
+      }
       throw err;
     }
   }
@@ -143,7 +170,18 @@ export class VideoWorker extends WorkerHost {
     const { videoId } = job.data;
     this.logger.log(`[thumbnail] start video=${videoId}`);
 
+    let logEntry: JobLog | null = null;
     try {
+      logEntry = await this.jobLogRepo
+        .create({
+          videoId,
+          queueJobId: job.id ?? null,
+          type: JobType.GENERATE_THUMBNAIL,
+          attempt: job.attemptsMade + 1,
+          startedAt: new Date(),
+        })
+        .catch(() => null);
+
       const video = await this.videoRepo.findById(videoId);
       if (!video) throw new Error(`Video ${videoId} not found`);
 
@@ -187,13 +225,24 @@ export class VideoWorker extends WorkerHost {
         processedAt: current?.processedAt ?? new Date(),
       });
 
+      if (logEntry) {
+        await this.jobLogRepo
+          .markCompleted(logEntry.id, new Date())
+          .catch(() => {});
+      }
       this.logger.log(`[thumbnail] complete video=${videoId}`);
 
       // Chain cleanup job
       await this.queueService.enqueueCleanup(videoId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? (err.stack ?? null) : null;
       this.logger.error(`[thumbnail] failed video=${videoId}: ${message}`);
+      if (logEntry) {
+        await this.jobLogRepo
+          .markFailed(logEntry.id, message, stack, new Date())
+          .catch(() => {});
+      }
       throw err;
     }
   }
@@ -204,9 +253,26 @@ export class VideoWorker extends WorkerHost {
     const { videoId } = job.data;
     const tmpDir = this.tmpDirFor(videoId);
     this.logger.log(`[cleanup] removing ${tmpDir}`);
+
+    const logEntry = await this.jobLogRepo
+      .create({
+        videoId,
+        queueJobId: job.id ?? null,
+        type: JobType.CLEANUP_TEMP,
+        attempt: job.attemptsMade + 1,
+        startedAt: new Date(),
+      })
+      .catch(() => null);
+
     await fs.promises
       .rm(tmpDir, { recursive: true, force: true })
       .catch(() => {});
+
+    if (logEntry) {
+      await this.jobLogRepo
+        .markCompleted(logEntry.id, new Date())
+        .catch(() => {});
+    }
     this.logger.log(`[cleanup] complete video=${videoId}`);
   }
 
