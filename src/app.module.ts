@@ -5,6 +5,7 @@ import { StorageModule } from './infra/storage/storage.module';
 import { QueueModule } from './infra/queue/queue.module';
 import { FfmpegModule } from './infra/ffmpeg/ffmpeg.module';
 import { VideoModule } from './modules/videos/modules/video.module';
+import { WorkerModule } from './workers/worker.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { VideoModule } from './modules/videos/modules/video.module';
     QueueModule,
     FfmpegModule,
     VideoModule,
+    WorkerModule,
     UserModule,
   ],
   controllers: [],
