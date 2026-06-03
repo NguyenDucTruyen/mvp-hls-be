@@ -63,6 +63,14 @@ export class VideoService {
       this.logger.log(`Video ${video.id} queued for transcoding`);
 
       return { ...video, status: VideoStatus.QUEUED };
+    } catch (err) {
+      this.logger.error(
+        `Upload failed: filename=${file.originalname}`,
+        err instanceof Error
+          ? err.stack
+          : JSON.stringify(err, Object.getOwnPropertyNames(err)),
+      );
+      throw err;
     } finally {
       await fs.promises.unlink(tmpPath).catch(() => {});
     }
@@ -71,16 +79,24 @@ export class VideoService {
   async findAll(
     dto: ListVideosDto,
   ): Promise<{ videos: Video[]; total: number }> {
-    return this.videoRepo.findAll({
+    this.logger.log(
+      `findAll: page=${dto.page ?? 1}, limit=${dto.limit ?? 20}, status=${dto.status ?? 'all'}`,
+    );
+    const result = await this.videoRepo.findAll({
       status: dto.status,
       page: dto.page,
       limit: dto.limit,
     });
+    this.logger.log(
+      `findAll success: returned=${result.videos.length}, total=${result.total}`,
+    );
+    return result;
   }
 
   async findById(id: string): Promise<Video> {
     const video = await this.videoRepo.findById(id);
     if (!video) {
+      this.logger.warn(`Video not found: id=${id}`);
       throw new NotFoundException(`Video ${id} not found`);
     }
     return video;
@@ -96,6 +112,9 @@ export class VideoService {
     const video = await this.findById(id);
 
     if (video.status !== VideoStatus.FAILED) {
+      this.logger.warn(
+        `Retry rejected: id=${id}, current status="${video.status}" (must be FAILED)`,
+      );
       throw new ConflictException(
         `Video ${id} cannot be retried: current status is "${video.status}"`,
       );

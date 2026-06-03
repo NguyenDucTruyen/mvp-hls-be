@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   MaxFileSizeValidator,
   Param,
   ParseFilePipe,
@@ -33,6 +34,8 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
 @Controller('videos')
 export class VideoController {
+  private readonly logger = new Logger(VideoController.name);
+
   constructor(private readonly videoService: VideoService) {}
 
   @Post('upload')
@@ -52,8 +55,22 @@ export class VideoController {
     file: Express.Multer.File,
     @Body() dto: UploadVideoDto,
   ): Promise<{ data: { id: string; status: string } }> {
-    const video = await this.videoService.uploadVideo(file, dto);
-    return createApiResponse({ id: video.id, status: video.status });
+    this.logger.log(
+      `Upload request: filename=${file.originalname}, size=${file.size}, title=${dto.title}`,
+    );
+    try {
+      const video = await this.videoService.uploadVideo(file, dto);
+      this.logger.log(
+        `Upload success: videoId=${video.id}, status=${video.status}`,
+      );
+      return createApiResponse({ id: video.id, status: video.status });
+    } catch (err) {
+      this.logger.error(
+        `Upload failed: filename=${file.originalname}`,
+        serializeError(err),
+      );
+      throw err;
+    }
   }
 
   @Get()
@@ -61,26 +78,51 @@ export class VideoController {
     data: VideoResponseDto[];
     meta: { total: number; page: number; limit: number };
   }> {
-    const { videos, total } = await this.videoService.findAll(query);
-    return createApiListResponse(videos.map(toResponseDto), {
-      total,
-      page: query.page ?? 1,
-      limit: query.limit ?? 20,
-    });
+    this.logger.log(
+      `List videos request: page=${query.page ?? 1}, limit=${query.limit ?? 20}, status=${query.status ?? 'all'}`,
+    );
+    try {
+      const { videos, total } = await this.videoService.findAll(query);
+      this.logger.log(
+        `List videos success: returned=${videos.length}, total=${total}`,
+      );
+      return createApiListResponse(videos.map(toResponseDto), {
+        total,
+        page: query.page ?? 1,
+        limit: query.limit ?? 20,
+      });
+    } catch (err) {
+      this.logger.error('List videos failed', serializeError(err));
+      throw err;
+    }
   }
 
   @Get(':id')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ data: VideoResponseDto }> {
-    const video = await this.videoService.findById(id);
-    return createApiResponse(toResponseDto(video));
+    this.logger.log(`Get video request: id=${id}`);
+    try {
+      const video = await this.videoService.findById(id);
+      this.logger.log(`Get video success: id=${id}, status=${video.status}`);
+      return createApiResponse(toResponseDto(video));
+    } catch (err) {
+      this.logger.error(`Get video failed: id=${id}`, serializeError(err));
+      throw err;
+    }
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.videoService.deleteVideo(id);
+    this.logger.log(`Delete video request: id=${id}`);
+    try {
+      await this.videoService.deleteVideo(id);
+      this.logger.log(`Delete video success: id=${id}`);
+    } catch (err) {
+      this.logger.error(`Delete video failed: id=${id}`, serializeError(err));
+      throw err;
+    }
   }
 
   @Post(':id/retry')
@@ -88,8 +130,24 @@ export class VideoController {
   async retry(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ data: { id: string; status: string } }> {
-    const video = await this.videoService.retryVideo(id);
-    return createApiResponse({ id: video.id, status: video.status });
+    this.logger.log(`Retry video request: id=${id}`);
+    try {
+      const video = await this.videoService.retryVideo(id);
+      this.logger.log(`Retry video success: id=${id}, status=${video.status}`);
+      return createApiResponse({ id: video.id, status: video.status });
+    } catch (err) {
+      this.logger.error(`Retry video failed: id=${id}`, serializeError(err));
+      throw err;
+    }
+  }
+}
+
+function serializeError(err: unknown): string {
+  if (err instanceof Error) return err.stack ?? err.message;
+  try {
+    return JSON.stringify(err, Object.getOwnPropertyNames(err));
+  } catch {
+    return String(err);
   }
 }
 
