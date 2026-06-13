@@ -10,6 +10,28 @@ export interface UploadResult {
   secureUrl: string;
 }
 
+export interface SignedUploadOptions {
+  publicId: string;
+  resourceType: 'video' | 'raw' | 'image';
+  maxFileSize: number;
+}
+
+export interface SignedUploadResult {
+  uploadUrl: string;
+  publicId: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  resourceType: 'video' | 'raw' | 'image';
+}
+
+export interface CompletedUploadData {
+  publicId: string;
+  version: number;
+  signature: string;
+  secureUrl: string;
+}
+
 export interface IStorageAdapter {
   /**
    * Upload a local file to the storage backend.
@@ -18,6 +40,18 @@ export interface IStorageAdapter {
    * @returns        The stored public-id and CDN URLs.
    */
   upload(filePath: string, options?: UploadOptions): Promise<UploadResult>;
+
+  /**
+   * Create signed direct-upload parameters for browser-to-cloud uploads.
+   * The caller controls the public-id so completion can be validated later.
+   */
+  createSignedUpload(options: SignedUploadOptions): Promise<SignedUploadResult>;
+
+  /**
+   * Verify that a direct-upload completion payload was signed by the storage
+   * provider before trusting its public-id and secure URL.
+   */
+  verifyUploadResult(data: CompletedUploadData): Promise<boolean>;
 
   /**
    * Permanently remove an asset from the storage backend.

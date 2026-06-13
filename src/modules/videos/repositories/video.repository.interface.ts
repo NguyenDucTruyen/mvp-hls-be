@@ -24,6 +24,11 @@ export interface ReadyVideoData {
   processedAt: Date;
 }
 
+export interface RawAssetData {
+  rawKey: string;
+  rawUrl: string;
+}
+
 export interface FindAllOptions {
   status?: VideoStatus;
   page?: number;
@@ -36,6 +41,7 @@ export interface IVideoRepository {
     options?: FindAllOptions,
   ): Promise<{ videos: Video[]; total: number }>;
   create(data: CreateVideoData): Promise<Video>;
+  updateRawAsset(id: string, data: RawAssetData): Promise<void>;
   updateStatus(id: string, status: VideoStatus): Promise<void>;
   setProgress(id: string, progress: number): Promise<void>;
   setFailed(id: string, errorMessage: string): Promise<void>;

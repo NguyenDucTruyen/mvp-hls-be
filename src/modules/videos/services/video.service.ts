@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -17,6 +18,27 @@ import type { IVideoRepository } from '../repositories/video.repository.interfac
 import { VIDEO_REPOSITORY } from '../repositories/video.repository.interface';
 import type { UploadVideoDto } from '../dto/upload-video.dto';
 import type { ListVideosDto } from '../dto/list-videos.dto';
+import type { CreateSignedUploadDto } from '../dto/create-signed-upload.dto';
+import { MAX_DIRECT_UPLOAD_SIZE } from '../dto/create-signed-upload.dto';
+import type { CompleteSignedUploadDto } from '../dto/complete-signed-upload.dto';
+
+interface SignedUploadResponse {
+  videoId: string;
+  uploadUrl: string;
+  publicId: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  resourceType: 'video';
+  maxFileSize: number;
+  uploadParams: {
+    public_id: string;
+    timestamp: number;
+    api_key: string;
+    signature: string;
+    overwrite: false;
+  };
+}
 
 @Injectable()
 export class VideoService {
@@ -74,6 +96,90 @@ export class VideoService {
     } finally {
       await fs.promises.unlink(tmpPath).catch(() => {});
     }
+  }
+
+  async createSignedUpload(
+    dto: CreateSignedUploadDto,
+  ): Promise<SignedUploadResponse> {
+    const video = await this.videoRepo.create({
+      title: dto.title,
+      description: dto.description ?? null,
+      originalFilename: dto.originalFilename,
+      mimeType: dto.mimeType,
+      sizeBytes: dto.sizeBytes,
+      rawKey: null,
+      rawUrl: null,
+    });
+    const publicId = `mvp-hls/raw/${video.id}`;
+    const signedUpload = await this.storage.createSignedUpload({
+      publicId,
+      resourceType: 'video',
+      maxFileSize: MAX_DIRECT_UPLOAD_SIZE,
+    });
+
+    this.logger.log(`Created signed upload for video ${video.id}`);
+
+    return {
+      videoId: video.id,
+      uploadUrl: signedUpload.uploadUrl,
+      publicId: signedUpload.publicId,
+      apiKey: signedUpload.apiKey,
+      timestamp: signedUpload.timestamp,
+      signature: signedUpload.signature,
+      resourceType: 'video',
+      maxFileSize: MAX_DIRECT_UPLOAD_SIZE,
+      uploadParams: {
+        public_id: signedUpload.publicId,
+        timestamp: signedUpload.timestamp,
+        api_key: signedUpload.apiKey,
+        signature: signedUpload.signature,
+        overwrite: false,
+      },
+    };
+  }
+
+  async completeSignedUpload(
+    id: string,
+    dto: CompleteSignedUploadDto,
+  ): Promise<Video> {
+    const video = await this.findById(id);
+
+    if (video.status !== VideoStatus.UPLOADED) {
+      throw new ConflictException(
+        `Video ${id} cannot complete upload from status "${video.status}"`,
+      );
+    }
+
+    const expectedPublicId = `mvp-hls/raw/${video.id}`;
+    if (dto.publicId !== expectedPublicId) {
+      throw new BadRequestException('Uploaded asset does not match video');
+    }
+
+    const isValidUpload = await this.storage.verifyUploadResult({
+      publicId: dto.publicId,
+      version: dto.version,
+      signature: dto.signature,
+      secureUrl: dto.secureUrl,
+    });
+
+    if (!isValidUpload) {
+      throw new BadRequestException('Invalid upload signature');
+    }
+
+    await this.videoRepo.updateRawAsset(id, {
+      rawKey: dto.publicId,
+      rawUrl: dto.secureUrl,
+    });
+    await this.videoRepo.updateStatus(id, VideoStatus.QUEUED);
+    await this.queueService.enqueueTranscode(id);
+    this.logger.log(`Direct upload complete; video ${id} queued`);
+
+    return {
+      ...video,
+      rawKey: dto.publicId,
+      rawUrl: dto.secureUrl,
+      status: VideoStatus.QUEUED,
+    };
   }
 
   async findAll(

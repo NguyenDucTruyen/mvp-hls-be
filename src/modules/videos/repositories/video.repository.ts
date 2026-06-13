@@ -7,6 +7,7 @@ import {
   CreateVideoData,
   FindAllOptions,
   IVideoRepository,
+  RawAssetData,
   ReadyVideoData,
 } from './video.repository.interface';
 
@@ -62,6 +63,14 @@ export class VideoRepository implements IVideoRepository {
       progress: 0,
     });
     return this.videoRepo.save(video);
+  }
+
+  async updateRawAsset(id: string, data: RawAssetData): Promise<void> {
+    await this.videoRepo.update(id, {
+      rawKey: data.rawKey,
+      rawUrl: data.rawUrl,
+      errorMessage: null,
+    });
   }
 
   async updateStatus(id: string, status: VideoStatus): Promise<void> {

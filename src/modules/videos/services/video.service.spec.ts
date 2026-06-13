@@ -1,6 +1,11 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import * as fs from 'fs';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { VideoService } from './video.service';
 import { VIDEO_REPOSITORY } from '../repositories/video.repository.interface';
 import type { IVideoRepository } from '../repositories/video.repository.interface';
@@ -16,6 +21,7 @@ function makeVideoRepo(): jest.Mocked<IVideoRepository> {
     findById: jest.fn(),
     findAll: jest.fn(),
     create: jest.fn(),
+    updateRawAsset: jest.fn().mockResolvedValue(undefined),
     updateStatus: jest.fn().mockResolvedValue(undefined),
     setProgress: jest.fn().mockResolvedValue(undefined),
     setFailed: jest.fn().mockResolvedValue(undefined),
@@ -28,6 +34,8 @@ function makeVideoRepo(): jest.Mocked<IVideoRepository> {
 function makeStorage(): jest.Mocked<IStorageAdapter> {
   return {
     upload: jest.fn(),
+    createSignedUpload: jest.fn(),
+    verifyUploadResult: jest.fn(),
     delete: jest.fn(),
     downloadToTemp: jest.fn().mockResolvedValue(undefined),
   };
@@ -177,6 +185,112 @@ describe('VideoService', () => {
       ).rejects.toThrow('Cloudinary unavailable');
 
       expect(fs.promises.unlink).toHaveBeenCalled();
+    });
+  });
+
+  describe('createSignedUpload', () => {
+    it('creates a pending video and returns signed Cloudinary upload parameters', async () => {
+      const createdVideo = makeVideo({ rawKey: null, rawUrl: null });
+      videoRepo.create.mockResolvedValue(createdVideo as never);
+      storage.createSignedUpload.mockResolvedValue({
+        uploadUrl: 'https://api.cloudinary.com/v1_1/demo/video/upload',
+        publicId: 'mvp-hls/raw/uuid-video-1',
+        apiKey: 'api-key',
+        timestamp: 1781111111,
+        signature: 'signed',
+        resourceType: 'video',
+      });
+
+      const result = await service.createSignedUpload({
+        title: 'Direct Upload',
+        originalFilename: 'direct.mp4',
+        mimeType: 'video/mp4',
+        sizeBytes: 2048,
+      });
+
+      expect(videoRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Direct Upload',
+          originalFilename: 'direct.mp4',
+          rawKey: null,
+          rawUrl: null,
+        }),
+      );
+      expect(storage.createSignedUpload).toHaveBeenCalledWith({
+        publicId: 'mvp-hls/raw/uuid-video-1',
+        resourceType: 'video',
+        maxFileSize: 500 * 1024 * 1024,
+      });
+      expect(result.videoId).toBe('uuid-video-1');
+      expect(result.uploadParams.public_id).toBe('mvp-hls/raw/uuid-video-1');
+    });
+  });
+
+  describe('completeSignedUpload', () => {
+    it('verifies upload metadata, stores raw asset, and queues transcode', async () => {
+      const video = makeVideo({ rawKey: null, rawUrl: null });
+      videoRepo.findById.mockResolvedValue(video as never);
+      storage.verifyUploadResult.mockResolvedValue(true);
+
+      const result = await service.completeSignedUpload('uuid-video-1', {
+        publicId: 'mvp-hls/raw/uuid-video-1',
+        version: 1781111111,
+        signature: 'response-signature',
+        secureUrl:
+          'https://res.cloudinary.com/demo/video/upload/v1/mvp-hls/raw/uuid-video-1.mp4',
+      });
+
+      expect(storage.verifyUploadResult).toHaveBeenCalledWith({
+        publicId: 'mvp-hls/raw/uuid-video-1',
+        version: 1781111111,
+        signature: 'response-signature',
+        secureUrl:
+          'https://res.cloudinary.com/demo/video/upload/v1/mvp-hls/raw/uuid-video-1.mp4',
+      });
+      expect(videoRepo.updateRawAsset).toHaveBeenCalledWith('uuid-video-1', {
+        rawKey: 'mvp-hls/raw/uuid-video-1',
+        rawUrl:
+          'https://res.cloudinary.com/demo/video/upload/v1/mvp-hls/raw/uuid-video-1.mp4',
+      });
+      expect(videoRepo.updateStatus).toHaveBeenCalledWith(
+        'uuid-video-1',
+        VideoStatus.QUEUED,
+      );
+      expect(queueService.enqueueTranscode).toHaveBeenCalledWith(
+        'uuid-video-1',
+      );
+      expect(result.status).toBe(VideoStatus.QUEUED);
+    });
+
+    it('rejects completion when the public id does not match the video', async () => {
+      videoRepo.findById.mockResolvedValue(makeVideo() as never);
+
+      await expect(
+        service.completeSignedUpload('uuid-video-1', {
+          publicId: 'mvp-hls/raw/other-video',
+          version: 1781111111,
+          signature: 'response-signature',
+          secureUrl:
+            'https://res.cloudinary.com/demo/video/upload/v1/mvp-hls/raw/other-video.mp4',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(queueService.enqueueTranscode).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion when Cloudinary response signature is invalid', async () => {
+      videoRepo.findById.mockResolvedValue(makeVideo() as never);
+      storage.verifyUploadResult.mockResolvedValue(false);
+
+      await expect(
+        service.completeSignedUpload('uuid-video-1', {
+          publicId: 'mvp-hls/raw/uuid-video-1',
+          version: 1781111111,
+          signature: 'bad-signature',
+          secureUrl:
+            'https://res.cloudinary.com/demo/video/upload/v1/mvp-hls/raw/uuid-video-1.mp4',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(queueService.enqueueTranscode).not.toHaveBeenCalled();
     });
   });
 

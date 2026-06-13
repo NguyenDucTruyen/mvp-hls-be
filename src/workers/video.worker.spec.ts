@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/unbound-method */
+import * as fs from 'fs';
 import { VideoWorker } from './video.worker';
 import { VideoStatus } from '../modules/videos/entities/video.entity';
 import { JobType } from '../infra/queue/queue.constants';
@@ -28,6 +30,7 @@ function makeVideoRepo(): jest.Mocked<IVideoRepository> {
     findById: jest.fn(),
     findAll: jest.fn(),
     create: jest.fn(),
+    updateRawAsset: jest.fn().mockResolvedValue(undefined),
     updateStatus: jest.fn().mockResolvedValue(undefined),
     setProgress: jest.fn().mockResolvedValue(undefined),
     setFailed: jest.fn().mockResolvedValue(undefined),
@@ -40,6 +43,8 @@ function makeVideoRepo(): jest.Mocked<IVideoRepository> {
 function makeStorage(): jest.Mocked<IStorageAdapter> {
   return {
     upload: jest.fn(),
+    createSignedUpload: jest.fn(),
+    verifyUploadResult: jest.fn(),
     delete: jest.fn(),
     downloadToTemp: jest.fn().mockResolvedValue(undefined),
   };
@@ -64,7 +69,10 @@ describe('VideoWorker', () => {
     Pick<FfmpegService, 'transcode' | 'generateThumbnail'>
   >;
   let queueService: jest.Mocked<
-    Pick<QueueService, 'enqueueTranscode' | 'enqueueThumbnail' | 'enqueueCleanup'>
+    Pick<
+      QueueService,
+      'enqueueTranscode' | 'enqueueThumbnail' | 'enqueueCleanup'
+    >
   >;
 
   beforeEach(() => {
@@ -82,9 +90,9 @@ describe('VideoWorker', () => {
     };
 
     worker = new VideoWorker(
-      videoRepo as unknown as IVideoRepository,
-      storage as unknown as IStorageAdapter,
-      jobLogRepo as unknown as IJobLogRepository,
+      videoRepo,
+      storage,
+      jobLogRepo,
       ffmpegService as unknown as FfmpegService,
       queueService as unknown as QueueService,
     );
@@ -99,7 +107,10 @@ describe('VideoWorker', () => {
   describe('process() dispatch', () => {
     it('routes TRANSCODE_HLS to handleTranscode', async () => {
       const spy = jest
-        .spyOn(worker as unknown as Record<string, () => Promise<void>>, 'handleTranscode')
+        .spyOn(
+          worker as unknown as Record<string, () => Promise<void>>,
+          'handleTranscode',
+        )
         .mockResolvedValue(undefined);
 
       await worker.process(makeJob(JobType.TRANSCODE_HLS, 'video-1'));
@@ -109,7 +120,10 @@ describe('VideoWorker', () => {
 
     it('routes GENERATE_THUMBNAIL to handleThumbnail', async () => {
       const spy = jest
-        .spyOn(worker as unknown as Record<string, () => Promise<void>>, 'handleThumbnail')
+        .spyOn(
+          worker as unknown as Record<string, () => Promise<void>>,
+          'handleThumbnail',
+        )
         .mockResolvedValue(undefined);
 
       await worker.process(makeJob(JobType.GENERATE_THUMBNAIL, 'video-1'));
@@ -119,7 +133,10 @@ describe('VideoWorker', () => {
 
     it('routes CLEANUP_TEMP to handleCleanup', async () => {
       const spy = jest
-        .spyOn(worker as unknown as Record<string, () => Promise<void>>, 'handleCleanup')
+        .spyOn(
+          worker as unknown as Record<string, () => Promise<void>>,
+          'handleCleanup',
+        )
         .mockResolvedValue(undefined);
 
       await worker.process(makeJob(JobType.CLEANUP_TEMP, 'video-1'));
@@ -161,7 +178,7 @@ describe('VideoWorker', () => {
         id: 'video-1',
         rawUrl: null,
         originalFilename: 'test.mp4',
-        status: VideoStatus.UPLOADED,
+        status: VideoStatus.QUEUED,
       } as never);
 
       await expect(
@@ -171,6 +188,24 @@ describe('VideoWorker', () => {
       expect(videoRepo.setFailed).toHaveBeenCalledWith(
         'video-1',
         'Video video-1 has no rawUrl',
+      );
+    });
+
+    it('calls setFailed when a direct upload has not completed', async () => {
+      videoRepo.findById.mockResolvedValue({
+        id: 'video-1',
+        rawUrl: null,
+        originalFilename: 'test.mp4',
+        status: VideoStatus.UPLOADED,
+      } as never);
+
+      await expect(
+        worker.process(makeJob(JobType.TRANSCODE_HLS, 'video-1')),
+      ).rejects.toThrow('Video video-1 upload has not completed');
+
+      expect(videoRepo.setFailed).toHaveBeenCalledWith(
+        'video-1',
+        'Video video-1 upload has not completed',
       );
     });
   });
@@ -212,7 +247,7 @@ describe('VideoWorker', () => {
         id: 'video-1',
         rawUrl: 'https://res.cloudinary.com/raw/test.mp4',
         originalFilename: 'test.mp4',
-        status: VideoStatus.UPLOADED,
+        status: VideoStatus.QUEUED,
       };
       videoRepo.findById.mockResolvedValue(fakeVideo as never);
 
@@ -245,10 +280,12 @@ describe('VideoWorker', () => {
 
       // Mock fs.promises.mkdir so tmpDir creation doesn't hit disk
       const mkdirSpy = jest
-        .spyOn(require('fs').promises, 'mkdir')
+        .spyOn(fs.promises, 'mkdir')
         .mockResolvedValue(undefined);
 
-      ffmpegService.transcode = jest.fn().mockResolvedValue(fakeTranscodeResult);
+      ffmpegService.transcode = jest
+        .fn()
+        .mockResolvedValue(fakeTranscodeResult);
 
       await worker.process(makeJob(JobType.TRANSCODE_HLS, 'video-1'));
 

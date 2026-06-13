@@ -6,7 +6,10 @@ import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { Readable } from 'stream';
 import {
+  CompletedUploadData,
   IStorageAdapter,
+  SignedUploadOptions,
+  SignedUploadResult,
   UploadOptions,
   UploadResult,
 } from './storage.interface';
@@ -48,6 +51,50 @@ export class CloudinaryStorageAdapter implements IStorageAdapter, OnModuleInit {
       url: result.url,
       secureUrl: result.secure_url,
     };
+  }
+
+  createSignedUpload(
+    options: SignedUploadOptions,
+  ): Promise<SignedUploadResult> {
+    const cloudName = this.configService.getOrThrow<string>(
+      'CLOUDINARY_CLOUD_NAME',
+    );
+    const apiKey = this.configService.getOrThrow<string>('CLOUDINARY_API_KEY');
+    const apiSecret = this.configService.getOrThrow<string>(
+      'CLOUDINARY_API_SECRET',
+    );
+    const timestamp = Math.floor(Date.now() / 1000);
+    const params = {
+      public_id: options.publicId,
+      timestamp,
+      overwrite: false,
+    };
+
+    const signature = cloudinary.utils.api_sign_request(params, apiSecret);
+
+    return Promise.resolve({
+      uploadUrl: `https://api.cloudinary.com/v1_1/${cloudName}/${options.resourceType}/upload`,
+      publicId: options.publicId,
+      apiKey,
+      timestamp,
+      signature,
+      resourceType: options.resourceType,
+    });
+  }
+
+  verifyUploadResult(data: CompletedUploadData): Promise<boolean> {
+    const apiSecret = this.configService.getOrThrow<string>(
+      'CLOUDINARY_API_SECRET',
+    );
+    const expectedSignature = cloudinary.utils.api_sign_request(
+      {
+        public_id: data.publicId,
+        version: data.version,
+      },
+      apiSecret,
+    );
+
+    return Promise.resolve(expectedSignature === data.signature);
   }
 
   async delete(

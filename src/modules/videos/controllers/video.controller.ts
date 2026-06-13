@@ -19,6 +19,8 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { VideoService } from '../services/video.service';
 import { UploadVideoDto } from '../dto/upload-video.dto';
+import { CreateSignedUploadDto } from '../dto/create-signed-upload.dto';
+import { CompleteSignedUploadDto } from '../dto/complete-signed-upload.dto';
 import { ListVideosDto } from '../dto/list-videos.dto';
 import {
   VideoResponseDto,
@@ -71,6 +73,45 @@ export class VideoController {
       );
       throw err;
     }
+  }
+
+  @Post('upload/signature')
+  @HttpCode(HttpStatus.CREATED)
+  async createSignedUpload(@Body() dto: CreateSignedUploadDto): Promise<{
+    data: {
+      videoId: string;
+      uploadUrl: string;
+      publicId: string;
+      apiKey: string;
+      timestamp: number;
+      signature: string;
+      resourceType: 'video';
+      maxFileSize: number;
+      uploadParams: {
+        public_id: string;
+        timestamp: number;
+        api_key: string;
+        signature: string;
+        overwrite: false;
+      };
+    };
+  }> {
+    this.logger.log(
+      `Signed upload request: filename=${dto.originalFilename}, size=${dto.sizeBytes}, title=${dto.title}`,
+    );
+    const signedUpload = await this.videoService.createSignedUpload(dto);
+    return createApiResponse(signedUpload);
+  }
+
+  @Post(':id/upload-complete')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async completeSignedUpload(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CompleteSignedUploadDto,
+  ): Promise<{ data: { id: string; status: string } }> {
+    this.logger.log(`Direct upload completion request: id=${id}`);
+    const video = await this.videoService.completeSignedUpload(id, dto);
+    return createApiResponse({ id: video.id, status: video.status });
   }
 
   @Get()

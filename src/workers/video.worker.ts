@@ -72,6 +72,9 @@ export class VideoWorker extends WorkerHost {
 
       const video = await this.videoRepo.findById(videoId);
       if (!video) throw new Error(`Video ${videoId} not found`);
+      if (video.status === VideoStatus.UPLOADED) {
+        throw new Error(`Video ${videoId} upload has not completed`);
+      }
       if (!video.rawUrl) throw new Error(`Video ${videoId} has no rawUrl`);
 
       await this.videoRepo.updateStatus(videoId, VideoStatus.PROCESSING);
