@@ -147,7 +147,6 @@ src/
 │   ├── queue/           # BullMQ queue setup
 │   └── storage/         # Cloudinary storage adapter
 ├── modules/
-│   ├── users/           # User CRUD (controller, service, repository, DTOs)
 │   └── videos/          # Video upload & HLS processing (controller, service, repository, DTOs)
 ├── shared/
 │   ├── filters/         # Global exception filter

@@ -70,53 +70,6 @@ const schemas: Record<string, object> = {
   Meta,
   ErrorResponse,
 
-  // ── User ─────────────────────────────────────────────────────────────────────
-  User: {
-    type: 'object',
-    required: ['id', 'name', 'email', 'createdAt', 'updatedAt'],
-    properties: {
-      id: { type: 'string', format: 'uuid' },
-      name: { type: 'string', maxLength: 255, example: 'Alice' },
-      email: { type: 'string', format: 'email', example: 'alice@example.com' },
-      createdAt: { type: 'string', format: 'date-time' },
-      updatedAt: { type: 'string', format: 'date-time' },
-    },
-  },
-
-  CreateUserRequest: {
-    type: 'object',
-    required: ['name', 'email'],
-    properties: {
-      name: { type: 'string', maxLength: 255, example: 'Alice' },
-      email: { type: 'string', format: 'email', example: 'alice@example.com' },
-    },
-  },
-
-  UpdateUserRequest: {
-    type: 'object',
-    properties: {
-      name: { type: 'string', maxLength: 255, example: 'Alice' },
-      email: { type: 'string', format: 'email', example: 'alice@example.com' },
-    },
-  },
-
-  UserResponse: {
-    type: 'object',
-    required: ['data'],
-    properties: {
-      data: { $ref: '#/components/schemas/User' },
-    },
-  },
-
-  UserListResponse: {
-    type: 'object',
-    required: ['data', 'meta'],
-    properties: {
-      data: { type: 'array', items: { $ref: '#/components/schemas/User' } },
-      meta: { $ref: '#/components/schemas/Meta' },
-    },
-  },
-
   // ── Video ─────────────────────────────────────────────────────────────────────
   VideoStatus: {
     type: 'string',
@@ -337,107 +290,6 @@ const errorResponses = {
 };
 
 const paths: Record<string, object> = {
-  // ─── Users ─────────────────────────────────────────────────────────────────
-  '/api/users': {
-    get: {
-      tags: ['Users'],
-      summary: 'List users',
-      operationId: 'listUsers',
-      parameters: PaginationParams,
-      responses: {
-        '200': {
-          description: 'Paginated list of users',
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/UserListResponse' },
-            },
-          },
-        },
-        ...errorResponses,
-      },
-    },
-    post: {
-      tags: ['Users'],
-      summary: 'Create a user',
-      operationId: 'createUser',
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/CreateUserRequest' },
-          },
-        },
-      },
-      responses: {
-        '201': {
-          description: 'User created',
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/UserResponse' },
-            },
-          },
-        },
-        '400': errorResponses['400'],
-        '500': errorResponses['500'],
-      },
-    },
-  },
-
-  '/api/users/{id}': {
-    get: {
-      tags: ['Users'],
-      summary: 'Get a user by ID',
-      operationId: 'getUser',
-      parameters: [UuidParam('id')],
-      responses: {
-        '200': {
-          description: 'User found',
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/UserResponse' },
-            },
-          },
-        },
-        ...errorResponses,
-      },
-    },
-    patch: {
-      tags: ['Users'],
-      summary: 'Update a user',
-      operationId: 'updateUser',
-      parameters: [UuidParam('id')],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/UpdateUserRequest' },
-          },
-        },
-      },
-      responses: {
-        '200': {
-          description: 'User updated',
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/UserResponse' },
-            },
-          },
-        },
-        ...errorResponses,
-      },
-    },
-    delete: {
-      tags: ['Users'],
-      summary: 'Delete a user',
-      operationId: 'deleteUser',
-      parameters: [UuidParam('id')],
-      responses: {
-        '204': { description: 'User deleted' },
-        ...errorResponses,
-      },
-    },
-  },
-
   // ─── Videos ────────────────────────────────────────────────────────────────
   '/api/videos/upload': {
     post: {
@@ -651,7 +503,6 @@ const document: Omit<OpenAPIObject, 'paths'> & {
   },
   servers: [{ url: 'http://localhost:3000', description: 'Local development' }],
   tags: [
-    { name: 'Users', description: 'User management' },
     { name: 'Videos', description: 'Video upload and HLS streaming' },
   ],
   paths,

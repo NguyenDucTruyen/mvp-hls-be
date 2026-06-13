@@ -44,14 +44,6 @@ src/
 │   │   └── modules/
 │   │       └── video.module.ts
 │   │
-│   └── users/                           # Reference pattern (pre-existing)
-│       ├── controllers/
-│       ├── services/
-│       ├── repositories/
-│       ├── dto/
-│       ├── entities/
-│       └── modules/
-│
 ├── infra/
 │   ├── database/
 │   │   ├── data-source.ts           # TypeORM CLI DataSource (migrations)
@@ -93,8 +85,7 @@ AppModule
   ├── QueueModule           ← @Global, exports QueueService
   ├── FfmpegModule          ← @Global, exports FfmpegService
   ├── VideoModule           ← VideoController + VideoService + VideoRepository
-  ├── WorkerModule          ← VideoWorker + VideoRepository + JobLogRepository
-  └── UserModule            ← reference pattern
+  └── WorkerModule          ← VideoWorker + VideoRepository + JobLogRepository
 
 WorkerModule (same process, separate registration)
   ├── TypeOrmModule.forFeature([Video, VideoVariant, JobLog])
