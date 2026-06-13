@@ -2,7 +2,7 @@
 
 ## Overview
 
-MVP video upload & HLS streaming platform. Users upload raw video files; the system transcodes them to HLS format via a background worker, then serves adaptive bitrate playback.
+MVP video upload & HLS streaming platform. Clients upload raw video files; the system transcodes them to HLS format via a background worker, then serves adaptive bitrate playback.
 
 ## Tech Stack
 
