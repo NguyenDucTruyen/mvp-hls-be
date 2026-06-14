@@ -1,24 +1,17 @@
 import {
+  Body,
   Controller,
   Delete,
-  FileTypeValidator,
   Get,
   HttpCode,
   HttpStatus,
   Logger,
-  MaxFileSizeValidator,
   Param,
-  ParseFilePipe,
   ParseUUIDPipe,
   Post,
   Query,
-  UploadedFile,
-  UseInterceptors,
-  Body,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { VideoService } from '../services/video.service';
-import { UploadVideoDto } from '../dto/upload-video.dto';
 import { CreateSignedUploadDto } from '../dto/create-signed-upload.dto';
 import { CompleteSignedUploadDto } from '../dto/complete-signed-upload.dto';
 import { ListVideosDto } from '../dto/list-videos.dto';
@@ -32,48 +25,11 @@ import {
   createApiListResponse,
 } from '@/shared/utils/api-response.util';
 
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
-
 @Controller('videos')
 export class VideoController {
   private readonly logger = new Logger(VideoController.name);
 
   constructor(private readonly videoService: VideoService) {}
-
-  @Post('upload')
-  @HttpCode(HttpStatus.CREATED)
-  @UseInterceptors(FileInterceptor('file'))
-  async upload(
-    @UploadedFile(
-      new ParseFilePipe({
-        validators: [
-          new MaxFileSizeValidator({ maxSize: MAX_FILE_SIZE }),
-          new FileTypeValidator({
-            fileType: /video\/(mp4|quicktime|x-msvideo|webm|x-matroska)/,
-          }),
-        ],
-      }),
-    )
-    file: Express.Multer.File,
-    @Body() dto: UploadVideoDto,
-  ): Promise<{ data: { id: string; status: string } }> {
-    this.logger.log(
-      `Upload request: filename=${file.originalname}, size=${file.size}, title=${dto.title}`,
-    );
-    try {
-      const video = await this.videoService.uploadVideo(file, dto);
-      this.logger.log(
-        `Upload success: videoId=${video.id}, status=${video.status}`,
-      );
-      return createApiResponse({ id: video.id, status: video.status });
-    } catch (err) {
-      this.logger.error(
-        `Upload failed: filename=${file.originalname}`,
-        serializeError(err),
-      );
-      throw err;
-    }
-  }
 
   @Post('upload/signature')
   @HttpCode(HttpStatus.CREATED)

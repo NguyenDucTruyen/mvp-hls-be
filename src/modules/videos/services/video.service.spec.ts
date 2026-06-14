@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/unbound-method */
-import * as fs from 'fs';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   BadRequestException,
@@ -48,24 +47,6 @@ function makeQueueService(): jest.Mocked<
     enqueueTranscode: jest.fn().mockResolvedValue(undefined),
     enqueueThumbnail: jest.fn().mockResolvedValue(undefined),
     enqueueCleanup: jest.fn().mockResolvedValue(undefined),
-  };
-}
-
-function makeMulterFile(
-  overrides: Partial<Express.Multer.File> = {},
-): Express.Multer.File {
-  return {
-    fieldname: 'file',
-    originalname: 'sample.mp4',
-    encoding: '7bit',
-    mimetype: 'video/mp4',
-    size: 2048,
-    buffer: Buffer.from('fake-video-data'),
-    stream: null as unknown as Express.Multer.File['stream'],
-    destination: '',
-    filename: '',
-    path: '',
-    ...overrides,
   };
 }
 
@@ -123,69 +104,8 @@ describe('VideoService', () => {
     service = module.get(VideoService);
   });
 
-  beforeEach(() => {
-    jest
-      .spyOn(fs.promises, 'writeFile')
-      .mockImplementation(() => Promise.resolve());
-    jest
-      .spyOn(fs.promises, 'unlink')
-      .mockImplementation(() => Promise.resolve());
-  });
-
   afterEach(() => {
     jest.restoreAllMocks();
-  });
-
-  // ── uploadVideo ─────────────────────────────────────────────────────────
-
-  describe('uploadVideo', () => {
-    it('uploads file, creates DB record, and enqueues transcode job', async () => {
-      const file = makeMulterFile();
-      const dto = { title: 'My Test Video' };
-      const createdVideo = makeVideo();
-
-      storage.upload.mockResolvedValue({
-        publicId: 'mvp-hls/raw/abc',
-        url: 'http://res.cloudinary.com/raw/abc.mp4',
-        secureUrl: 'https://res.cloudinary.com/raw/abc.mp4',
-      });
-      videoRepo.create.mockResolvedValue(createdVideo as never);
-
-      const result = await service.uploadVideo(file, dto);
-
-      expect(fs.promises.writeFile).toHaveBeenCalled();
-      expect(storage.upload).toHaveBeenCalledWith(
-        expect.stringMatching(/\.mp4$/),
-        { folder: 'mvp-hls/raw', resourceType: 'video' },
-      );
-      expect(videoRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'My Test Video',
-          originalFilename: 'sample.mp4',
-          mimeType: 'video/mp4',
-          sizeBytes: 2048,
-        }),
-      );
-      expect(videoRepo.updateStatus).toHaveBeenCalledWith(
-        'uuid-video-1',
-        VideoStatus.QUEUED,
-      );
-      expect(queueService.enqueueTranscode).toHaveBeenCalledWith(
-        'uuid-video-1',
-      );
-      expect(result.status).toBe(VideoStatus.QUEUED);
-    });
-
-    it('removes the temp file even when upload fails', async () => {
-      const file = makeMulterFile();
-      storage.upload.mockRejectedValue(new Error('Cloudinary unavailable'));
-
-      await expect(
-        service.uploadVideo(file, { title: 'fail' }),
-      ).rejects.toThrow('Cloudinary unavailable');
-
-      expect(fs.promises.unlink).toHaveBeenCalled();
-    });
   });
 
   describe('createSignedUpload', () => {

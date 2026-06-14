@@ -9,11 +9,15 @@ Ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 export interface QualityPreset {
   label: string;
-  width: number;
-  height: number;
+  maxLongSide: number;
   videoBitrateKbps: number;
   audioBitrateKbps: number;
 }
+
+type ResolvedQualityPreset = QualityPreset & {
+  width: number;
+  height: number;
+};
 
 export interface TranscodeVariantResult {
   label: string;
@@ -26,27 +30,50 @@ export interface TranscodeVariantResult {
 export interface TranscodeResult {
   masterPlaylistPath: string;
   variants: TranscodeVariantResult[];
+  source: VideoSourceMetadata;
+}
+
+export interface VideoSourceMetadata {
+  width: number | null;
+  height: number | null;
+  durationSec: number | null;
+}
+
+interface VideoProbeStream {
+  codec_type?: string;
+  width?: number;
+  height?: number;
+  tags?: {
+    rotate?: string;
+  };
+  side_data_list?: Array<{
+    rotation?: number;
+  }>;
+}
+
+interface VideoProbeData {
+  format?: {
+    duration?: number;
+  };
+  streams?: VideoProbeStream[];
 }
 
 const QUALITY_PRESETS: QualityPreset[] = [
   {
     label: '360p',
-    width: 640,
-    height: 360,
+    maxLongSide: 640,
     videoBitrateKbps: 800,
     audioBitrateKbps: 96,
   },
   {
     label: '720p',
-    width: 1280,
-    height: 720,
+    maxLongSide: 1280,
     videoBitrateKbps: 2800,
     audioBitrateKbps: 128,
   },
   {
     label: '1080p',
-    width: 1920,
-    height: 1080,
+    maxLongSide: 1920,
     videoBitrateKbps: 5000,
     audioBitrateKbps: 192,
   },
@@ -69,9 +96,11 @@ export class FfmpegService {
     this.logger.log(`Starting HLS transcode: ${inputPath} → ${outputDir}`);
     await fs.promises.mkdir(outputDir, { recursive: true });
 
+    const source = await this.probeSource(inputPath);
+    const presets = this.buildVariantPresets(source);
     const variants: TranscodeVariantResult[] = [];
 
-    for (const preset of QUALITY_PRESETS) {
+    for (const preset of presets) {
       const variantDir = path.join(outputDir, preset.label);
       await fs.promises.mkdir(variantDir, { recursive: true });
       const playlistPath = path.join(variantDir, 'index.m3u8');
@@ -93,7 +122,7 @@ export class FfmpegService {
     await this.writeMasterPlaylist(masterPlaylistPath, variants);
 
     this.logger.log(`HLS transcode complete: ${masterPlaylistPath}`);
-    return { masterPlaylistPath, variants };
+    return { masterPlaylistPath, variants, source };
   }
 
   /**
@@ -115,7 +144,6 @@ export class FfmpegService {
           timestamps: [timeSec],
           filename: outputFile,
           folder: outputDir,
-          size: '1280x720',
         })
         .on('end', () => resolve())
         .on('error', (err: Error) => reject(err));
@@ -128,7 +156,7 @@ export class FfmpegService {
     inputPath: string,
     variantDir: string,
     playlistPath: string,
-    preset: QualityPreset,
+    preset: ResolvedQualityPreset,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       Ffmpeg(inputPath)
@@ -136,11 +164,11 @@ export class FfmpegService {
         .audioCodec('aac')
         .videoBitrate(preset.videoBitrateKbps)
         .audioBitrate(preset.audioBitrateKbps)
-        .size(`${preset.width}x${preset.height}`)
         .outputOptions([
           '-preset veryfast',
           '-profile:v baseline',
           '-level 3.0',
+          `-vf scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,setsar=1`,
           '-start_number 0',
           `-hls_time ${HLS_SEGMENT_DURATION}`,
           '-hls_list_size 0',
@@ -161,6 +189,101 @@ export class FfmpegService {
         .on('error', (err: Error) => reject(err))
         .run();
     });
+  }
+
+  private probeSource(inputPath: string): Promise<VideoSourceMetadata> {
+    return new Promise((resolve, reject) => {
+      Ffmpeg.ffprobe(inputPath, (err: Error | null, data: VideoProbeData) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const stream = data.streams?.find((item) => item.codec_type === 'video');
+        if (!stream?.width || !stream.height) {
+          resolve({
+            width: null,
+            height: null,
+            durationSec: data.format?.duration ?? null,
+          });
+          return;
+        }
+
+        const rotation = this.getRotation(stream);
+        const isSideways = Math.abs(rotation) % 180 === 90;
+        const width = isSideways ? stream.height : stream.width;
+        const height = isSideways ? stream.width : stream.height;
+
+        resolve({
+          width,
+          height,
+          durationSec: data.format?.duration ?? null,
+        });
+      });
+    });
+  }
+
+  private getRotation(stream: VideoProbeStream): number {
+    const tagRotation = Number(stream.tags?.rotate ?? 0);
+    if (Number.isFinite(tagRotation) && tagRotation !== 0) {
+      return tagRotation;
+    }
+
+    const sideDataRotation = stream.side_data_list?.find(
+      (item) => typeof item.rotation === 'number',
+    )?.rotation;
+
+    return sideDataRotation ?? 0;
+  }
+
+  private buildVariantPresets(
+    source: VideoSourceMetadata,
+  ): ResolvedQualityPreset[] {
+    if (!source.width || !source.height) {
+      return QUALITY_PRESETS.map((preset) => ({
+        ...preset,
+        ...this.resolveVariantSize(preset.maxLongSide, 16 / 9),
+      }));
+    }
+
+    const sourceLongSide = Math.max(source.width, source.height);
+    const aspectRatio = source.width / source.height;
+    const usedSizes = new Set<string>();
+
+    return QUALITY_PRESETS.map((preset) => {
+      const targetLongSide = Math.min(preset.maxLongSide, sourceLongSide);
+      const size = this.resolveVariantSize(targetLongSide, aspectRatio);
+
+      return { ...preset, ...size };
+    }).filter((preset) => {
+      const key = `${preset.width}x${preset.height}`;
+      if (usedSizes.has(key)) {
+        return false;
+      }
+      usedSizes.add(key);
+      return true;
+    });
+  }
+
+  private resolveVariantSize(
+    targetLongSide: number,
+    aspectRatio: number,
+  ): { width: number; height: number } {
+    if (aspectRatio >= 1) {
+      return {
+        width: this.toEven(targetLongSide),
+        height: this.toEven(targetLongSide / aspectRatio),
+      };
+    }
+
+    return {
+      width: this.toEven(targetLongSide * aspectRatio),
+      height: this.toEven(targetLongSide),
+    };
+  }
+
+  private toEven(value: number): number {
+    return Math.max(2, Math.round(value / 2) * 2);
   }
 
   private async writeMasterPlaylist(

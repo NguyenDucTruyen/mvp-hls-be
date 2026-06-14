@@ -10,52 +10,6 @@ tags:
   - name: Videos
     description: Video upload and HLS streaming
 paths:
-  /api/videos/upload:
-    post:
-      tags:
-        - Videos
-      summary: Upload a video
-      operationId: uploadVideo
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - file
-                - title
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: Video file (mp4, mov, avi, webm, mkv — max 500 MB)
-                title:
-                  type: string
-                  maxLength: 255
-                  example: My Video
-                description:
-                  type: string
-                  example: Optional description
-      responses:
-        '201':
-          description: Upload accepted — processing queued
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VideoUploadResponse'
-        '400':
-          description: Bad Request / Validation error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
   /api/videos/upload/signature:
     post:
       tags:

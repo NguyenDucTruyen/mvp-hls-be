@@ -141,6 +141,9 @@ export class VideoWorker extends WorkerHost {
       await this.videoRepo.setReady(videoId, {
         hlsKey: masterKey,
         playbackUrl: masterUrl,
+        durationSec: transcodeResult.source.durationSec,
+        width: transcodeResult.source.width,
+        height: transcodeResult.source.height,
         processedAt: new Date(),
       });
 

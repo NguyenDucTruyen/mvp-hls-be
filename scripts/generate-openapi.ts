@@ -291,50 +291,6 @@ const errorResponses = {
 
 const paths: Record<string, object> = {
   // ─── Videos ────────────────────────────────────────────────────────────────
-  '/api/videos/upload': {
-    post: {
-      tags: ['Videos'],
-      summary: 'Upload a video',
-      operationId: 'uploadVideo',
-      requestBody: {
-        required: true,
-        content: {
-          'multipart/form-data': {
-            schema: {
-              type: 'object',
-              required: ['file', 'title'],
-              properties: {
-                file: {
-                  type: 'string',
-                  format: 'binary',
-                  description:
-                    'Video file (mp4, mov, avi, webm, mkv — max 500 MB)',
-                },
-                title: { type: 'string', maxLength: 255, example: 'My Video' },
-                description: {
-                  type: 'string',
-                  example: 'Optional description',
-                },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        '201': {
-          description: 'Upload accepted — processing queued',
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/VideoUploadResponse' },
-            },
-          },
-        },
-        '400': errorResponses['400'],
-        '500': errorResponses['500'],
-      },
-    },
-  },
-
   '/api/videos/upload/signature': {
     post: {
       tags: ['Videos'],

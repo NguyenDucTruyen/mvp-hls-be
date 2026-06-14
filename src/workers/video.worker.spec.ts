@@ -255,6 +255,7 @@ describe('VideoWorker', () => {
         variants: [
           { label: '360p', width: 640, height: 360, bitrateKbps: 800 },
         ],
+        source: { durationSec: 12.5, width: 640, height: 360 },
         masterPlaylistPath: '/tmp/video-1/hls/master.m3u8',
       };
 
@@ -300,6 +301,9 @@ describe('VideoWorker', () => {
         'video-1',
         expect.objectContaining({
           playbackUrl: 'https://cdn.example.com/hls/video-1/master.m3u8',
+          durationSec: 12.5,
+          width: 640,
+          height: 360,
         }),
       );
       expect(jobLogRepo.markCompleted).toHaveBeenCalledWith(

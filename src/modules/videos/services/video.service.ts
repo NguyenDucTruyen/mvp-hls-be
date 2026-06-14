@@ -1,7 +1,3 @@
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import { randomUUID } from 'crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -16,7 +12,6 @@ import { QueueService } from '../../../infra/queue/queue.service';
 import { Video, VideoStatus } from '../entities/video.entity';
 import type { IVideoRepository } from '../repositories/video.repository.interface';
 import { VIDEO_REPOSITORY } from '../repositories/video.repository.interface';
-import type { UploadVideoDto } from '../dto/upload-video.dto';
 import type { ListVideosDto } from '../dto/list-videos.dto';
 import type { CreateSignedUploadDto } from '../dto/create-signed-upload.dto';
 import { MAX_DIRECT_UPLOAD_SIZE } from '../dto/create-signed-upload.dto';
@@ -51,52 +46,6 @@ export class VideoService {
     private readonly storage: IStorageAdapter,
     private readonly queueService: QueueService,
   ) {}
-
-  async uploadVideo(
-    file: Express.Multer.File,
-    dto: UploadVideoDto,
-  ): Promise<Video> {
-    const tmpPath = path.join(
-      os.tmpdir(),
-      `${randomUUID()}${path.extname(file.originalname)}`,
-    );
-
-    try {
-      await fs.promises.writeFile(tmpPath, file.buffer);
-      this.logger.log(`Uploading ${file.originalname} to Cloudinary`);
-
-      const result = await this.storage.upload(tmpPath, {
-        folder: 'mvp-hls/raw',
-        resourceType: 'video',
-      });
-
-      const video = await this.videoRepo.create({
-        title: dto.title,
-        description: dto.description ?? null,
-        originalFilename: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-        rawKey: result.publicId,
-        rawUrl: result.secureUrl,
-      });
-
-      await this.videoRepo.updateStatus(video.id, VideoStatus.QUEUED);
-      await this.queueService.enqueueTranscode(video.id);
-      this.logger.log(`Video ${video.id} queued for transcoding`);
-
-      return { ...video, status: VideoStatus.QUEUED };
-    } catch (err) {
-      this.logger.error(
-        `Upload failed: filename=${file.originalname}`,
-        err instanceof Error
-          ? err.stack
-          : JSON.stringify(err, Object.getOwnPropertyNames(err)),
-      );
-      throw err;
-    } finally {
-      await fs.promises.unlink(tmpPath).catch(() => {});
-    }
-  }
 
   async createSignedUpload(
     dto: CreateSignedUploadDto,
