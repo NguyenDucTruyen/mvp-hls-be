@@ -153,9 +153,16 @@ const schemas: Record<string, object> = {
       mimeType: {
         type: 'string',
         enum: [
+          '',
+          'application/octet-stream',
           'video/mp4',
           'video/quicktime',
+          'video/x-m4v',
+          'video/3gpp',
+          'video/3gpp2',
           'video/x-msvideo',
+          'video/msvideo',
+          'video/avi',
           'video/webm',
           'video/x-matroska',
         ],

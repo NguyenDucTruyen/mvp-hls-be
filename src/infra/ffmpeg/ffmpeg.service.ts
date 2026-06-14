@@ -2,10 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Injectable, Logger } from '@nestjs/common';
 import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const Ffmpeg = require('fluent-ffmpeg') as typeof import('fluent-ffmpeg');
 
 Ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+Ffmpeg.setFfprobePath(ffprobeInstaller.path);
 
 export interface QualityPreset {
   label: string;
@@ -166,9 +168,12 @@ export class FfmpegService {
         .audioBitrate(preset.audioBitrateKbps)
         .outputOptions([
           '-preset veryfast',
-          '-profile:v baseline',
-          '-level 3.0',
-          `-vf scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,setsar=1`,
+          '-profile:v main',
+          '-pix_fmt yuv420p',
+          `-vf scale=${preset.width}:${preset.height},setsar=1`,
+          '-g 48',
+          '-keyint_min 48',
+          '-sc_threshold 0',
           '-start_number 0',
           `-hls_time ${HLS_SEGMENT_DURATION}`,
           '-hls_list_size 0',
@@ -199,7 +204,9 @@ export class FfmpegService {
           return;
         }
 
-        const stream = data.streams?.find((item) => item.codec_type === 'video');
+        const stream = data.streams?.find(
+          (item) => item.codec_type === 'video',
+        );
         if (!stream?.width || !stream.height) {
           resolve({
             width: null,
